@@ -15,7 +15,7 @@
 // grader invokes it from. A $MAKEFUN_INPUT_DIR override is honoured when set,
 // for graders that stage the repo elsewhere.
 
-import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDossier } from './vendor/makefun-frontend.ts';
@@ -38,6 +38,17 @@ mkdirSync(targetDir, { recursive: true });
 copyTree('app');
 copyTree('screenshots');
 
+// Fail fast if the build produced nothing to score: a missing or empty
+// app/ or screenshots/ means the entry is broken, and it is better to error
+// here than to hand the grader an empty output.
+function requireNonEmptyDir(dirPath, label) {
+  if (!existsSync(dirPath) || readdirSync(dirPath).length === 0) {
+    throw new Error(`NusaData entry is incomplete: ${label} is missing or empty (${dirPath})`);
+  }
+}
+requireNonEmptyDir(join(targetDir, 'app'), 'app');
+requireNonEmptyDir(join(targetDir, 'screenshots'), 'screenshots');
+
 // Caps from the scorer's gate: at most 163840 bytes of dossier text, at most
 // 4 screenshots of at most 256 KiB each, at most 993 entries / 16 MiB in app/.
 const dossier = buildDossier(targetDir, {
@@ -46,5 +57,9 @@ const dossier = buildDossier(targetDir, {
   app_max_files: 993,
   app_max_bytes: 16777216,
 });
-writeFileSync(join(targetDir, 'dossier.json'), dossier);
+const dossierPath = join(targetDir, 'dossier.json');
+writeFileSync(dossierPath, dossier);
+if (statSync(dossierPath).size === 0) {
+  throw new Error(`NusaData entry is incomplete: dossier.json is empty (${dossierPath})`);
+}
 console.log(`NusaData entry written to ${targetDir}`);
